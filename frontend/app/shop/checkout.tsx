@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useForm, Controller } from 'react-hook-form';
+import { useCartStore } from '../../stores/cartStore';
 
 interface CheckoutForm {
   customerName: string;
@@ -27,17 +28,6 @@ interface CheckoutForm {
   zipCode: string;
   country: string;
 }
-
-interface CartItem {
-  product_id: string;
-  quantity: number;
-}
-
-// Mock cart items - In a real app, you'd get this from state management
-const mockCartItems: CartItem[] = [
-  { product_id: "sample-1", quantity: 2 },
-  { product_id: "sample-2", quantity: 1 }
-];
 
 export default function Checkout() {
   const router = useRouter();
