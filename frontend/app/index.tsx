@@ -1,11 +1,33 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Text, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuthStore } from '../stores/authStore';
 
 export default function Index() {
   const router = useRouter();
+  const { isLoggedIn, userType, isCustomer, isAdmin, loadStoredAuth, logout } = useAuthStore();
+
+  useEffect(() => {
+    loadStoredAuth();
+  }, []);
+
+  const handleCustomerAccess = () => {
+    if (isCustomer()) {
+      router.push('/shop');
+    } else {
+      router.push('/auth/customer-login');
+    }
+  };
+
+  const handleAdminAccess = () => {
+    if (isAdmin()) {
+      router.push('/admin/dashboard');
+    } else {
+      router.push('/auth/admin-login');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -13,41 +35,61 @@ export default function Index() {
         <View style={styles.header}>
           <Ionicons name="storefront" size={64} color="#2563eb" />
           <Text style={styles.title}>My Store</Text>
-          <Text style={styles.subtitle}>Welcome to our mobile shopping experience</Text>
+          <Text style={styles.subtitle}>Choose how you'd like to access our store</Text>
         </View>
+
+        {isLoggedIn && (
+          <View style={styles.welcomeSection}>
+            <Text style={styles.welcomeText}>
+              Welcome back! You're logged in as {userType === 'admin' ? 'Admin' : 'Customer'}
+            </Text>
+            <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+              <Ionicons name="log-out-outline" size={16} color="#ef4444" />
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.buttonContainer}>
           <TouchableOpacity 
             style={[styles.button, styles.customerButton]}
-            onPress={() => router.push('/shop')}
+            onPress={handleCustomerAccess}
           >
-            <Ionicons name="bag-handle" size={24} color="white" />
-            <Text style={styles.buttonText}>Shop Now</Text>
-            <Text style={styles.buttonSubtext}>Browse & Buy Products</Text>
+            <Ionicons name="person" size={24} color="white" />
+            <Text style={styles.buttonText}>
+              {isCustomer() ? 'Continue Shopping' : 'Customer Login'}
+            </Text>
+            <Text style={styles.buttonSubtext}>
+              {isCustomer() ? 'Browse & Buy Products' : 'Login with Phone OTP'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[styles.button, styles.adminButton]}
-            onPress={() => router.push('/admin')}
+            onPress={handleAdminAccess}
           >
-            <Ionicons name="settings" size={24} color="white" />
-            <Text style={styles.buttonText}>Admin Panel</Text>
-            <Text style={styles.buttonSubtext}>Manage Your Store</Text>
+            <Ionicons name="shield-checkmark" size={24} color="white" />
+            <Text style={styles.buttonText}>
+              {isAdmin() ? 'Admin Dashboard' : 'Admin Login'}
+            </Text>
+            <Text style={styles.buttonSubtext}>
+              {isAdmin() ? 'Manage Your Store' : 'Login with Username & Password'}
+            </Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.features}>
           <View style={styles.featureItem}>
+            <Ionicons name="lock-closed" size={20} color="#10b981" />
+            <Text style={styles.featureText}>Secure Authentication</Text>
+          </View>
+          <View style={styles.featureItem}>
             <Ionicons name="card" size={20} color="#10b981" />
-            <Text style={styles.featureText}>Secure Payments</Text>
+            <Text style={styles.featureText}>Safe Payments</Text>
           </View>
           <View style={styles.featureItem}>
             <Ionicons name="car" size={20} color="#10b981" />
             <Text style={styles.featureText}>Fast Delivery</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Ionicons name="shield-checkmark" size={20} color="#10b981" />
-            <Text style={styles.featureText}>Safe & Trusted</Text>
           </View>
         </View>
       </View>
