@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -13,46 +13,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-
-interface Product {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  image_base64: string;
-  inventory: number;
-}
-
-interface CartItem {
-  product: Product;
-  quantity: number;
-}
-
-// Mock cart data - In a real app, you'd use state management (Zustand, Redux)
-const mockCart: CartItem[] = [];
+import { useCartStore } from '../../stores/cartStore';
 
 export default function Cart() {
   const router = useRouter();
-  const [cart, setCart] = useState<CartItem[]>(mockCart);
-  const [cartTotal, setCartTotal] = useState(0);
-
-  useEffect(() => {
-    const total = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-    setCartTotal(total);
-  }, [cart]);
-
-  const updateQuantity = (productId: string, newQuantity: number) => {
-    if (newQuantity === 0) {
-      setCart(cart.filter(item => item.product.id !== productId));
-      return;
-    }
-
-    setCart(cart.map(item => 
-      item.product.id === productId 
-        ? { ...item, quantity: newQuantity }
-        : item
-    ));
-  };
+  
+  // Use cart store
+  const { cart, updateCartQuantity, getCartTotal } = useCartStore();
+  const cartTotal = getCartTotal();
 
   const proceedToCheckout = () => {
     if (cart.length === 0) {
