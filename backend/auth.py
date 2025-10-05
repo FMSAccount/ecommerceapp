@@ -1,14 +1,11 @@
 import jwt
 import os
+import hashlib
 from datetime import datetime, timedelta
-from passlib.context import CryptContext
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from twilio.rest import Client
 from typing import Optional, Dict, Any
-
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
 
 # JWT settings
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key")
