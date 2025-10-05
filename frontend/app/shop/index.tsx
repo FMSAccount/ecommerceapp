@@ -13,39 +13,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
-
-interface Product {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  image_base64: string;
-  inventory: number;
-}
-
-interface CartItem {
-  product: Product;
-  quantity: number;
-}
+import { useCartStore, type Product } from '../../stores/cartStore';
 
 export default function Shop() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cartTotal, setCartTotal] = useState(0);
+  
+  // Use cart store
+  const { addToCart, getCartTotal, getCartItemCount } = useCartStore();
+  const cartTotal = getCartTotal();
+  const cartItemCount = getCartItemCount();
 
   const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
   useEffect(() => {
     fetchProducts();
   }, []);
-
-  useEffect(() => {
-    // Calculate cart total
-    const total = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-    setCartTotal(total);
-  }, [cart]);
 
   const fetchProducts = async () => {
     try {
