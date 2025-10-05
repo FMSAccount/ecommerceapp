@@ -87,14 +87,14 @@ export default function Cart() {
                 <View style={styles.quantityContainer}>
                   <TouchableOpacity 
                     style={styles.quantityButton}
-                    onPress={() => updateQuantity(item.product.id, item.quantity - 1)}
+                    onPress={() => updateCartQuantity(item.product.id, item.quantity - 1)}
                   >
                     <Ionicons name="remove" size={16} color="#64748b" />
                   </TouchableOpacity>
                   <Text style={styles.quantityText}>{item.quantity}</Text>
                   <TouchableOpacity 
                     style={styles.quantityButton}
-                    onPress={() => updateQuantity(item.product.id, item.quantity + 1)}
+                    onPress={() => updateCartQuantity(item.product.id, item.quantity + 1)}
                     disabled={item.quantity >= item.product.inventory}
                   >
                     <Ionicons 
