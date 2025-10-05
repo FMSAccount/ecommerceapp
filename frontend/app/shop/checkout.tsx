@@ -60,7 +60,10 @@ export default function Checkout() {
     try {
       // First create the order
       const orderData = {
-        items: mockCartItems,
+        items: cart.map(item => ({
+          product_id: item.product.id,
+          quantity: item.quantity
+        })),
         customer_info: {
           name: formData.customerName,
           email: formData.email,
