@@ -80,7 +80,7 @@ export default function Shop() {
               styles.addButton, 
               item.inventory === 0 && styles.addButtonDisabled
             ]}
-            onPress={() => addToCart(item)}
+            onPress={() => handleAddToCart(item)}
             disabled={item.inventory === 0}
           >
             <Ionicons 
