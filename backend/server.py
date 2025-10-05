@@ -12,6 +12,15 @@ import uuid
 from datetime import datetime
 from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest
 import json
+from auth import (
+    hash_password, 
+    verify_password, 
+    create_access_token, 
+    get_current_user, 
+    get_current_admin,
+    send_otp,
+    verify_otp
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -30,7 +39,43 @@ app = FastAPI(title="E-commerce API", version="1.0.0")
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
-# Data Models
+# Authentication Models
+class UserRegistration(BaseModel):
+    name: str
+    phone: str
+
+class UserLogin(BaseModel):
+    phone: str
+
+class OTPVerification(BaseModel):
+    phone: str
+    otp: str
+
+class AdminLogin(BaseModel):
+    username: str
+    password: str
+
+class AdminRegistration(BaseModel):
+    username: str
+    password: str
+    full_name: str
+
+# User Models
+class User(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    phone: str
+    is_verified: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class Admin(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    username: str
+    password_hash: str
+    full_name: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+# Existing Data Models
 class Product(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
@@ -72,13 +117,14 @@ class ShippingAddress(BaseModel):
 
 class Order(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    items: List[Dict[str, Any]]  # Product details with quantities
+    items: List[Dict[str, Any]]
     customer_info: CustomerInfo
     shipping_address: ShippingAddress
     total_amount: float
     payment_status: str = Field(default="pending")
     order_status: str = Field(default="processing")
     stripe_session_id: Optional[str] = None
+    user_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class OrderCreate(BaseModel):
@@ -93,19 +139,170 @@ class PaymentTransaction(BaseModel):
     currency: str = Field(default="usd")
     payment_status: str = Field(default="pending")
     order_id: Optional[str] = None
+    user_id: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-class AdminAuth(BaseModel):
-    password: str
+# Authentication Endpoints
+@api_router.post("/auth/send-otp")
+async def send_otp_endpoint(user_data: UserLogin):
+    """Send OTP to user phone number"""
+    try:
+        success = await send_otp(user_data.phone)
+        if success:
+            return {"message": "OTP sent successfully", "phone": user_data.phone}
+        else:
+            raise HTTPException(status_code=400, detail="Failed to send OTP")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error sending OTP: {str(e)}")
 
-# Simple admin password (you can enhance this later)
-ADMIN_PASSWORD = "admin123"
+@api_router.post("/auth/register")
+async def register_user(user_data: UserRegistration, otp_data: OTPVerification):
+    """Register a new user with OTP verification"""
+    try:
+        # Verify OTP first
+        is_verified = await verify_otp(otp_data.phone, otp_data.otp)
+        if not is_verified:
+            raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+        
+        # Check if user already exists
+        existing_user = await db.users.find_one({"phone": user_data.phone})
+        if existing_user:
+            raise HTTPException(status_code=400, detail="User already exists with this phone number")
+        
+        # Create new user
+        user_dict = user_data.dict()
+        user_dict["is_verified"] = True
+        user = User(**user_dict)
+        await db.users.insert_one(user.dict())
+        
+        # Create JWT token
+        token_data = {
+            "user_id": user.id,
+            "phone": user.phone,
+            "user_type": "customer"
+        }
+        access_token = create_access_token(token_data)
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user.id,
+                "name": user.name,
+                "phone": user.phone
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Registration error: {str(e)}")
 
-# Product endpoints
+@api_router.post("/auth/login")
+async def login_user(otp_data: OTPVerification):
+    """Login existing user with OTP verification"""
+    try:
+        # Verify OTP first
+        is_verified = await verify_otp(otp_data.phone, otp_data.otp)
+        if not is_verified:
+            raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+        
+        # Find user by phone
+        user_data = await db.users.find_one({"phone": otp_data.phone})
+        if not user_data:
+            raise HTTPException(status_code=404, detail="User not found. Please register first.")
+        
+        user = User(**user_data)
+        
+        # Create JWT token
+        token_data = {
+            "user_id": user.id,
+            "phone": user.phone,
+            "user_type": "customer"
+        }
+        access_token = create_access_token(token_data)
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user.id,
+                "name": user.name,
+                "phone": user.phone
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Login error: {str(e)}")
+
+@api_router.post("/auth/admin/register")
+async def register_admin(admin_data: AdminRegistration):
+    """Register a new admin (protected - only for initial setup)"""
+    try:
+        # Check if admin already exists
+        existing_admin = await db.admins.find_one({"username": admin_data.username})
+        if existing_admin:
+            raise HTTPException(status_code=400, detail="Admin already exists with this username")
+        
+        # Create new admin
+        admin_dict = admin_data.dict()
+        admin_dict["password_hash"] = hash_password(admin_data.password)
+        del admin_dict["password"]  # Remove plain password
+        admin = Admin(**admin_dict)
+        await db.admins.insert_one(admin.dict())
+        
+        return {"message": "Admin registered successfully", "username": admin.username}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Admin registration error: {str(e)}")
+
+@api_router.post("/auth/admin/login")
+async def login_admin(admin_data: AdminLogin):
+    """Login admin with username and password"""
+    try:
+        # Find admin by username
+        admin_record = await db.admins.find_one({"username": admin_data.username})
+        if not admin_record:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        # Verify password
+        if not verify_password(admin_data.password, admin_record["password_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        admin = Admin(**admin_record)
+        
+        # Create JWT token
+        token_data = {
+            "user_id": admin.id,
+            "username": admin.username,
+            "user_type": "admin"
+        }
+        access_token = create_access_token(token_data)
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "admin": {
+                "id": admin.id,
+                "username": admin.username,
+                "full_name": admin.full_name
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Admin login error: {str(e)}")
+
+# Protected Product endpoints
 @api_router.get("/products", response_model=List[Product])
 async def get_products():
-    """Get all products"""
+    """Get all products (public endpoint)"""
     try:
         products = await db.products.find().to_list(1000)
         return [Product(**product) for product in products]
@@ -113,7 +310,7 @@ async def get_products():
         raise HTTPException(status_code=500, detail=f"Error fetching products: {str(e)}")
 
 @api_router.post("/products", response_model=Product)
-async def create_product(product_data: ProductCreate):
+async def create_product(product_data: ProductCreate, current_admin = Depends(get_current_admin)):
     """Create a new product (Admin only)"""
     try:
         product_dict = product_data.dict()
@@ -125,7 +322,7 @@ async def create_product(product_data: ProductCreate):
 
 @api_router.get("/products/{product_id}", response_model=Product)
 async def get_product(product_id: str):
-    """Get a specific product"""
+    """Get a specific product (public endpoint)"""
     try:
         product = await db.products.find_one({"id": product_id})
         if not product:
@@ -137,20 +334,17 @@ async def get_product(product_id: str):
         raise HTTPException(status_code=500, detail=f"Error fetching product: {str(e)}")
 
 @api_router.put("/products/{product_id}", response_model=Product)
-async def update_product(product_id: str, product_update: ProductUpdate):
+async def update_product(product_id: str, product_update: ProductUpdate, current_admin = Depends(get_current_admin)):
     """Update a product (Admin only)"""
     try:
-        # Check if product exists
         existing_product = await db.products.find_one({"id": product_id})
         if not existing_product:
             raise HTTPException(status_code=404, detail="Product not found")
         
-        # Update only provided fields
         update_data = {k: v for k, v in product_update.dict().items() if v is not None}
         if update_data:
             await db.products.update_one({"id": product_id}, {"$set": update_data})
         
-        # Return updated product
         updated_product = await db.products.find_one({"id": product_id})
         return Product(**updated_product)
     except HTTPException:
@@ -159,7 +353,7 @@ async def update_product(product_id: str, product_update: ProductUpdate):
         raise HTTPException(status_code=500, detail=f"Error updating product: {str(e)}")
 
 @api_router.delete("/products/{product_id}")
-async def delete_product(product_id: str):
+async def delete_product(product_id: str, current_admin = Depends(get_current_admin)):
     """Delete a product (Admin only)"""
     try:
         result = await db.products.delete_one({"id": product_id})
@@ -171,12 +365,11 @@ async def delete_product(product_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting product: {str(e)}")
 
-# Order endpoints
+# Protected Order endpoints
 @api_router.post("/orders", response_model=Order)
-async def create_order(order_data: OrderCreate):
-    """Create a new order"""
+async def create_order(order_data: OrderCreate, current_user = Depends(get_current_user)):
+    """Create a new order (Authenticated users only)"""
     try:
-        # Get product details and calculate total
         total_amount = 0.0
         order_items = []
         
@@ -199,10 +392,10 @@ async def create_order(order_data: OrderCreate):
                 "total": item_total
             })
         
-        # Create order
         order_dict = order_data.dict()
         order_dict["items"] = order_items
         order_dict["total_amount"] = total_amount
+        order_dict["user_id"] = current_user["user_id"]
         order = Order(**order_dict)
         
         await db.orders.insert_one(order.dict())
@@ -213,7 +406,7 @@ async def create_order(order_data: OrderCreate):
         raise HTTPException(status_code=500, detail=f"Error creating order: {str(e)}")
 
 @api_router.get("/orders", response_model=List[Order])
-async def get_orders():
+async def get_orders(current_admin = Depends(get_current_admin)):
     """Get all orders (Admin only)"""
     try:
         orders = await db.orders.find().sort("created_at", -1).to_list(1000)
@@ -221,13 +414,27 @@ async def get_orders():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching orders: {str(e)}")
 
+@api_router.get("/orders/my", response_model=List[Order])
+async def get_my_orders(current_user = Depends(get_current_user)):
+    """Get orders for current user"""
+    try:
+        orders = await db.orders.find({"user_id": current_user["user_id"]}).sort("created_at", -1).to_list(1000)
+        return [Order(**order) for order in orders]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching user orders: {str(e)}")
+
 @api_router.get("/orders/{order_id}", response_model=Order)
-async def get_order(order_id: str):
-    """Get a specific order"""
+async def get_order(order_id: str, current_user = Depends(get_current_user)):
+    """Get a specific order (Owner or Admin only)"""
     try:
         order = await db.orders.find_one({"id": order_id})
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
+        
+        # Check if user owns the order or is admin
+        if current_user["user_type"] != "admin" and order.get("user_id") != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
         return Order(**order)
     except HTTPException:
         raise
@@ -235,7 +442,7 @@ async def get_order(order_id: str):
         raise HTTPException(status_code=500, detail=f"Error fetching order: {str(e)}")
 
 @api_router.put("/orders/{order_id}/status")
-async def update_order_status(order_id: str, status_update: Dict[str, str]):
+async def update_order_status(order_id: str, status_update: Dict[str, str], current_admin = Depends(get_current_admin)):
     """Update order status (Admin only)"""
     try:
         new_status = status_update.get("order_status")
@@ -256,10 +463,10 @@ async def update_order_status(order_id: str, status_update: Dict[str, str]):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating order status: {str(e)}")
 
-# Payment endpoints
+# Protected Payment endpoints
 @api_router.post("/payments/checkout")
-async def create_checkout_session(request: Request):
-    """Create Stripe checkout session"""
+async def create_checkout_session(request: Request, current_user = Depends(get_current_user)):
+    """Create Stripe checkout session (Authenticated users only)"""
     try:
         body = await request.json()
         order_id = body.get("order_id")
@@ -268,17 +475,18 @@ async def create_checkout_session(request: Request):
         if not order_id or not origin_url:
             raise HTTPException(status_code=400, detail="order_id and origin_url are required")
         
-        # Get order details
         order = await db.orders.find_one({"id": order_id})
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
         
-        # Initialize Stripe checkout
+        # Check if user owns the order
+        if order.get("user_id") != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
         host_url = origin_url
         webhook_url = f"{host_url}/api/webhook/stripe"
         stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url=webhook_url)
         
-        # Create checkout session
         success_url = f"{origin_url}/payment-success?session_id={{CHECKOUT_SESSION_ID}}"
         cancel_url = f"{origin_url}/payment-cancel"
         
@@ -289,23 +497,23 @@ async def create_checkout_session(request: Request):
             cancel_url=cancel_url,
             metadata={
                 "order_id": order_id,
+                "user_id": current_user["user_id"],
                 "source": "mobile_checkout"
             }
         )
         
         session = await stripe_checkout.create_checkout_session(checkout_request)
         
-        # Create payment transaction record
         payment_transaction = PaymentTransaction(
             session_id=session.session_id,
             amount=order["total_amount"],
             currency="usd",
             order_id=order_id,
+            user_id=current_user["user_id"],
             metadata=checkout_request.metadata
         )
         await db.payment_transactions.insert_one(payment_transaction.dict())
         
-        # Update order with session ID
         await db.orders.update_one(
             {"id": order_id},
             {"$set": {"stripe_session_id": session.session_id}}
@@ -319,35 +527,35 @@ async def create_checkout_session(request: Request):
         raise HTTPException(status_code=500, detail=f"Error creating checkout session: {str(e)}")
 
 @api_router.get("/payments/status/{session_id}")
-async def get_payment_status(session_id: str):
-    """Get payment status"""
+async def get_payment_status(session_id: str, current_user = Depends(get_current_user)):
+    """Get payment status (Authenticated users only)"""
     try:
-        # Initialize Stripe checkout
-        stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url="")
+        # Check if user owns the payment transaction
+        payment_transaction = await db.payment_transactions.find_one({"session_id": session_id})
+        if not payment_transaction:
+            raise HTTPException(status_code=404, detail="Payment session not found")
         
-        # Get checkout status from Stripe
+        if payment_transaction.get("user_id") != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url="")
         checkout_status = await stripe_checkout.get_checkout_status(session_id)
         
-        # Update payment transaction
         await db.payment_transactions.update_one(
             {"session_id": session_id},
             {"$set": {"payment_status": checkout_status.payment_status}}
         )
         
-        # If payment is successful, update order and inventory
         if checkout_status.payment_status == "paid":
-            # Get payment transaction to find order ID
             payment_transaction = await db.payment_transactions.find_one({"session_id": session_id})
             if payment_transaction:
                 order_id = payment_transaction.get("order_id")
                 if order_id:
-                    # Update order payment status
                     await db.orders.update_one(
                         {"id": order_id},
                         {"$set": {"payment_status": "paid", "order_status": "confirmed"}}
                     )
                     
-                    # Update inventory
                     order = await db.orders.find_one({"id": order_id})
                     if order:
                         for item in order["items"]:
@@ -363,6 +571,8 @@ async def get_payment_status(session_id: str):
             "currency": checkout_status.currency
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error checking payment status: {str(e)}")
 
@@ -376,7 +586,6 @@ async def stripe_webhook(request: Request):
         stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url="")
         webhook_response = await stripe_checkout.handle_webhook(body, stripe_signature)
         
-        # Update payment transaction based on webhook
         if webhook_response.event_type in ["checkout.session.completed", "payment_intent.succeeded"]:
             await db.payment_transactions.update_one(
                 {"session_id": webhook_response.session_id},
@@ -389,28 +598,18 @@ async def stripe_webhook(request: Request):
         logging.error(f"Webhook error: {str(e)}")
         raise HTTPException(status_code=400, detail="Webhook error")
 
-# Admin endpoints
-@api_router.post("/admin/login")
-async def admin_login(auth: AdminAuth):
-    """Admin login"""
-    if auth.password != ADMIN_PASSWORD:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    
-    return {"message": "Login successful", "token": "admin_authenticated"}
-
+# Protected Admin endpoints
 @api_router.get("/admin/dashboard")
-async def admin_dashboard():
-    """Get admin dashboard data"""
+async def admin_dashboard(current_admin = Depends(get_current_admin)):
+    """Get admin dashboard data (Admin only)"""
     try:
-        # Get counts
         products_count = await db.products.count_documents({})
         orders_count = await db.orders.count_documents({})
         pending_orders = await db.orders.count_documents({"order_status": "processing"})
+        users_count = await db.users.count_documents({})
         
-        # Get recent orders
         recent_orders = await db.orders.find().sort("created_at", -1).limit(5).to_list(5)
         
-        # Calculate total revenue
         pipeline = [
             {"$match": {"payment_status": "paid"}},
             {"$group": {"_id": None, "total_revenue": {"$sum": "$total_amount"}}}
@@ -422,6 +621,7 @@ async def admin_dashboard():
             "products_count": products_count,
             "orders_count": orders_count,
             "pending_orders": pending_orders,
+            "users_count": users_count,
             "total_revenue": total_revenue,
             "recent_orders": [Order(**order) for order in recent_orders]
         }
