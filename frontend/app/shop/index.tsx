@@ -117,9 +117,9 @@ export default function Shop() {
           onPress={() => router.push('/shop/cart')}
         >
           <Ionicons name="bag" size={24} color="#1e293b" />
-          {getCartItemCount() > 0 && (
+          {cartItemCount > 0 && (
             <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{getCartItemCount()}</Text>
+              <Text style={styles.cartBadgeText}>{cartItemCount}</Text>
             </View>
           )}
         </TouchableOpacity>
