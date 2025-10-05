@@ -45,10 +45,13 @@ export default function Checkout() {
     },
   });
 
+  // Use cart store
+  const { cart } = useCartStore();
+
   const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
   const onSubmit = async (formData: CheckoutForm) => {
-    if (mockCartItems.length === 0) {
+    if (cart.length === 0) {
       Alert.alert('Error', 'Your cart is empty');
       return;
     }
