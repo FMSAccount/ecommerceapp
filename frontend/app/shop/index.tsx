@@ -47,53 +47,17 @@ export default function Shop() {
     }
   };
 
-  const addToCart = (product: Product) => {
-    const existingItem = cart.find(item => item.product.id === product.id);
-    
-    if (existingItem) {
-      if (existingItem.quantity >= product.inventory) {
-        Alert.alert('Stock Limit', 'Cannot add more items. Stock limit reached.');
-        return;
-      }
-      setCart(cart.map(item => 
-        item.product.id === product.id 
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      ));
-    } else {
+  const handleAddToCart = (product: Product) => {
+    try {
+      addToCart(product);
+      // Show success feedback (optional)
+    } catch (error) {
       if (product.inventory === 0) {
         Alert.alert('Out of Stock', 'This item is currently out of stock.');
-        return;
+      } else {
+        Alert.alert('Stock Limit', 'Cannot add more items. Stock limit reached.');
       }
-      setCart([...cart, { product, quantity: 1 }]);
     }
-  };
-
-  const removeFromCart = (productId: string) => {
-    setCart(cart.filter(item => item.product.id !== productId));
-  };
-
-  const updateCartQuantity = (productId: string, newQuantity: number) => {
-    if (newQuantity === 0) {
-      removeFromCart(productId);
-      return;
-    }
-
-    const product = products.find(p => p.id === productId);
-    if (product && newQuantity > product.inventory) {
-      Alert.alert('Stock Limit', 'Cannot exceed available stock.');
-      return;
-    }
-
-    setCart(cart.map(item => 
-      item.product.id === productId 
-        ? { ...item, quantity: newQuantity }
-        : item
-    ));
-  };
-
-  const getCartItemCount = () => {
-    return cart.reduce((sum, item) => sum + item.quantity, 0);
   };
 
   const renderProduct = ({ item }: { item: Product }) => (
