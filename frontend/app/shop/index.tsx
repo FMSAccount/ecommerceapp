@@ -145,14 +145,14 @@ export default function Shop() {
         </View>
       )}
 
-      {cart.length > 0 && (
+      {cartItemCount > 0 && (
         <TouchableOpacity 
           style={styles.checkoutButton}
           onPress={() => router.push('/shop/cart')}
         >
           <View style={styles.checkoutButtonContent}>
             <Text style={styles.checkoutButtonText}>
-              View Cart ({getCartItemCount()})
+              View Cart ({cartItemCount})
             </Text>
             <Text style={styles.checkoutButtonPrice}>
               ${cartTotal.toFixed(2)}
