@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 32,
   },
   title: {
     fontSize: 32,
@@ -122,6 +122,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#64748b',
     textAlign: 'center',
+    lineHeight: 22,
+  },
+  welcomeSection: {
+    backgroundColor: '#ecfdf5',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+    borderLeftWidth: 4,
+    borderLeftColor: '#10b981',
+  },
+  welcomeText: {
+    fontSize: 14,
+    color: '#065f46',
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  logoutText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '500',
+    marginLeft: 4,
   },
   buttonContainer: {
     gap: 16,
