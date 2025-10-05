@@ -108,7 +108,7 @@ export default function Cart() {
               <View style={styles.itemActions}>
                 <TouchableOpacity 
                   style={styles.removeButton}
-                  onPress={() => updateQuantity(item.product.id, 0)}
+                  onPress={() => updateCartQuantity(item.product.id, 0)}
                 >
                   <Ionicons name="trash-outline" size={20} color="#ef4444" />
                 </TouchableOpacity>
