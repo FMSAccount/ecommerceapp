@@ -28,15 +28,13 @@ except Exception as e:
 security = HTTPBearer()
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt"""
-    # Ensure password is within bcrypt's 72-byte limit
-    if len(password.encode('utf-8')) > 72:
-        password = password[:72]
-    return pwd_context.hash(password)
+    """Hash a password using SHA256 (for testing purposes)"""
+    salt = "auth_salt_2024"  # Simple salt for testing
+    return hashlib.sha256((password + salt).encode()).hexdigest()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+    return hash_password(plain_password) == hashed_password
 
 def create_access_token(data: Dict[Any, Any]) -> str:
     """Create a JWT token"""
