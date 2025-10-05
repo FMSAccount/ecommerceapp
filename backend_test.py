@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
 """
-E-commerce Backend API Testing Suite
-Tests all backend endpoints for the mobile e-commerce application
+Enhanced Authentication System API Testing
+Tests admin registration/login, SMS OTP flow, protected endpoints, and JWT validation
 """
 
 import requests
 import json
-import base64
-from datetime import datetime
-import uuid
+import time
+from typing import Dict, Any, Optional
 
-# Configuration
-BASE_URL = "https://ez-mobile-store.preview.emergentagent.com/api"
-ADMIN_PASSWORD = "admin123"
-
-# Test data
-SAMPLE_PRODUCT_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+# Backend URL from environment
+BACKEND_URL = "https://ez-mobile-store.preview.emergentagent.com/api"
 
 def print_test_result(test_name, success, details=""):
     """Print formatted test results"""
